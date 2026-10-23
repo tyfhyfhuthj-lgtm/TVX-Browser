@@ -66,7 +66,7 @@ class MainActivity : Activity() {
         toolbar.addView(button("←") { current()?.web?.goBack() })
         toolbar.addView(button("↻") { current()?.web?.reload() })
         address = EditText(this).apply {
-            singleLine = true
+            setSingleLine(true)
             textSize = 16f
             setTextColor(Color.WHITE)
             setHintTextColor(Color.LTGRAY)
