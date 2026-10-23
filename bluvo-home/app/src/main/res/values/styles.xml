@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="HomeTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/home_bg</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:colorAccent">#FFFFFFFF</item>
+    </style>
+    <color name="home_bg">#FF0B1020</color>
+</resources>
