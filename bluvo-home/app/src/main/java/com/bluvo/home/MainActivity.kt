@@ -20,6 +20,7 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
@@ -53,6 +54,17 @@ class MainActivity : Activity() {
     private val tabViews = ArrayList<TextView>()
     private val sideViews = ArrayList<Pair<ImageView, Int>>()
     private var currentTab = 0
+
+    // remote button mapping
+    private var captureMode = false
+    private var pendingKey: Int? = null
+    private var captureLabel: TextView? = null
+    private val blockedKeys = setOf(
+        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+        KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME,
+        KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_UNKNOWN
+    )
 
     private var apps: List<AppEntry> = emptyList()
     private var firstCard: View? = null
@@ -154,9 +166,26 @@ class MainActivity : Activity() {
         currentTab = 0
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (captureMode) {
+            if (event.action == KeyEvent.ACTION_UP) handleCapture(event.keyCode)
+            return true
+        }
+        // Fallback when the background service is off: mapped keys still work on the home screen.
+        if (!KeyMap.serviceEnabled(this)) {
+            val pkg = KeyMap.get(this, event.keyCode)
+            if (pkg != null) {
+                if (event.action == KeyEvent.ACTION_UP) KeyMap.launch(this, pkg)
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (currentTab != 0) showTab(0, true)
+        if (currentTab == 5) showTab(4, true)
+        else if (currentTab != 0) showTab(0, true)
         // Home screen: never close on Back.
     }
 
@@ -322,7 +351,7 @@ class MainActivity : Activity() {
             Triple(R.drawable.ic_tv, 3, { showTab(3, false) }),
             Triple(R.drawable.ic_movie, 1, { showTab(1, false) }),
             Triple(R.drawable.ic_game, 2, { showTab(2, false) }),
-            Triple(R.drawable.ic_more, -1, { openSettings() })
+            Triple(R.drawable.ic_more, 4, { showTab(4, false) })
         )
         sideViews.clear()
         for ((res, tab, action) in items) {
@@ -405,10 +434,21 @@ class MainActivity : Activity() {
                 page.addView(sectionTitle("ألعاب"))
                 page.addView(grid(apps.filter { it.isGame }))
             }
-            else -> {
+            3 -> {
                 page.addView(spacer(76))
                 page.addView(sectionTitle("التطبيقات"))
                 page.addView(grid(apps))
+            }
+            4 -> buildButtonsPage()
+            else -> {
+                val key = pendingKey
+                page.addView(spacer(76))
+                page.addView(sectionTitle("اختر التطبيق الذي يفتحه زر " + KeyMap.keyName(key ?: 0)))
+                page.addView(grid(apps) { app ->
+                    if (key != null) KeyMap.set(this, key, app.pkg)
+                    pendingKey = null
+                    showTab(4, true)
+                })
             }
         }
         styleTabs()
@@ -550,7 +590,7 @@ class MainActivity : Activity() {
         return hs
     }
 
-    private fun grid(list: List<AppEntry>): View {
+    private fun grid(list: List<AppEntry>, onPick: ((AppEntry) -> Unit)? = null): View {
         val wrap = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
@@ -580,7 +620,7 @@ class MainActivity : Activity() {
                 setPadding(0, dp(10), 0, dp(10))
             }
             for (a in chunk) {
-                val c = appCard(a)
+                val c = appCard(a, onPick)
                 if (firstCard == null) firstCard = c
                 row.addView(c, LinearLayout.LayoutParams(dp(cardW), dp(88)).apply { marginEnd = dp(gap) })
             }
@@ -589,7 +629,7 @@ class MainActivity : Activity() {
         return wrap
     }
 
-    private fun appCard(app: AppEntry): View {
+    private fun appCard(app: AppEntry, onPick: ((AppEntry) -> Unit)? = null): View {
         val card = FrameLayout(this)
         card.isFocusable = true
         card.isClickable = true
@@ -632,11 +672,112 @@ class MainActivity : Activity() {
                 .start()
             card.foreground = if (f) border else null
         }
-        card.setOnClickListener { launch(app) }
+        card.setOnClickListener { if (onPick != null) onPick(app) else launch(app) }
         card.setOnLongClickListener {
             openAppInfo(app.pkg)
             true
         }
         return card
+    }
+
+    // ---------- remote buttons page ----------
+
+    private fun handleCapture(code: Int) {
+        if (code == KeyEvent.KEYCODE_BACK) {
+            captureMode = false
+            showTab(4, true)
+            return
+        }
+        if (code in blockedKeys) {
+            captureLabel?.text = "هذا الزر مخصص للتنقل، اضغط زراً آخر (أو رجوع للإلغاء)"
+            return
+        }
+        captureMode = false
+        pendingKey = code
+        showTab(5, true)
+    }
+
+    private fun settingRow(title: String, sub: String?, onClick: (() -> Unit)?): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(14), dp(22), dp(14))
+            background = rounded(Color.parseColor("#1C2438"), 14f)
+            isFocusable = true
+            isClickable = onClick != null
+        }
+        val t = TextView(this).apply {
+            text = title
+            textSize = 17f
+            setTextColor(Color.WHITE)
+        }
+        row.addView(t)
+        var s: TextView? = null
+        if (sub != null) {
+            s = TextView(this).apply {
+                text = sub
+                textSize = 13f
+                setTextColor(Color.parseColor("#B3FFFFFF"))
+                setPadding(0, dp(4), 0, 0)
+            }
+            row.addView(s)
+        }
+        row.setOnFocusChangeListener { v, f ->
+            v.background = rounded(if (f) Color.WHITE else Color.parseColor("#1C2438"), 14f)
+            t.setTextColor(if (f) bg else Color.WHITE)
+            s?.setTextColor(if (f) Color.parseColor("#B30B1020") else Color.parseColor("#B3FFFFFF"))
+        }
+        if (onClick != null) row.setOnClickListener { onClick() }
+        if (firstCard == null) firstCard = row
+        row.layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) }
+        return row
+    }
+
+    private fun buildButtonsPage() {
+        page.addView(spacer(76))
+        page.addView(sectionTitle("تخصيص أزرار الريموت"))
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(88), dp(12), dp(88), 0)
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
+        }
+        page.addView(box)
+
+        if (captureMode) {
+            val row = settingRow("اضغط الآن الزر الذي تريد تخصيصه في الريموت…", "زر الرجوع للإلغاء", null)
+            captureLabel = (row as LinearLayout).getChildAt(0) as TextView
+            box.addView(row)
+        } else {
+            captureLabel = null
+            box.addView(settingRow("+ إضافة زر جديد", "اختر زراً في الريموت ثم اختر التطبيق الذي يفتحه") {
+                captureMode = true
+                showTab(4, true)
+            })
+        }
+
+        val enabled = KeyMap.serviceEnabled(this)
+        box.addView(settingRow(
+            if (enabled) "✓ الأزرار تعمل في كل مكان" else "الأزرار تعمل الآن من الواجهة فقط",
+            if (enabled) "خدمة Bluvo للأزرار مفعّلة"
+            else "لتعمل من داخل أي تطبيق: فعّل خدمة \"Bluvo أزرار الريموت\" من إعدادات إمكانية الوصول (اضغط هنا)"
+        ) {
+            safeStart(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        })
+
+        val maps = KeyMap.all(this)
+        if (maps.isNotEmpty()) {
+            box.addView(TextView(this).apply {
+                text = "الأزرار المخصّصة (اضغط على أي واحد لحذفه)"
+                setTextColor(Color.parseColor("#99FFFFFF"))
+                textSize = 14f
+                setPadding(0, dp(10), 0, dp(10))
+            })
+        }
+        for ((code, pkg) in maps) {
+            val label = apps.firstOrNull { it.pkg == pkg }?.label ?: pkg
+            box.addView(settingRow("زر " + KeyMap.keyName(code) + "  ←  " + label, null) {
+                KeyMap.remove(this, code)
+                showTab(4, true)
+            })
+        }
     }
 }

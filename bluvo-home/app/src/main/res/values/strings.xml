@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="keymap_label">Bluvo أزرار الريموت</string>
+    <string name="keymap_desc">تتيح لك فتح تطبيق معيّن بضغطة زر في الريموت من أي مكان.</string>
+</resources>
