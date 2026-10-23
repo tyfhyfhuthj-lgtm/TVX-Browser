@@ -23,10 +23,10 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import android.app.Activity
 import java.io.ByteArrayInputStream
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
     private data class Tab(val web: WebView, var title: String = "New tab")
     private val tabs = mutableListOf<Tab>()
     private var active = 0
