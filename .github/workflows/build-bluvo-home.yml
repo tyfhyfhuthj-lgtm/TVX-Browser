@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -46,3 +46,12 @@ jobs:
           path: bluvo-home/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/bluvo-home.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: bluvo-home-v1
+          name: Bluvo Home
+          target_commitish: bluvo-home
+          files: bluvo-home/app/build/outputs/apk/debug/bluvo-home.apk
